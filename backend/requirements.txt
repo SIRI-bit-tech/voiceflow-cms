@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+pydantic[email]
+python-jose[cryptography]
+passlib[bcrypt]
+python-multipart
+bcrypt
+PyJWT
+cloudinary
+redis
+openai
+python-dotenv
+websockets
