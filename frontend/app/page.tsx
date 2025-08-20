@@ -10,11 +10,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Building, Mic, Headphones, ArrowRight, LogIn, UserPlus } from "lucide-react"
+import { ContentDashboard } from "@/components/content/content-dashbaord"
 
 export default function HomePage() {
   const { state, login, register } = useAuth()
   const { user } = state
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const [showUserDashboard, setShowUserDashboard] = useState(false)
   const [showAuth, setShowAuth] = useState(false)
   const [isLogin, setIsLogin] = useState(true)
   const [formData, setFormData] = useState({
@@ -25,6 +27,10 @@ export default function HomePage() {
 
   if (user && showOnboarding) {
     return <VoiceOnboarding />
+  }
+
+  if (user && showUserDashboard && !showOnboarding) {
+    return <ContentDashboard />
   }
 
   if (user && !showOnboarding) {
@@ -43,7 +49,7 @@ export default function HomePage() {
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Button>
               <Button
-                onClick={() => (window.location.href = "/dashboard")}
+                onClick={() => setShowUserDashboard(true)}
                 variant="outline"
                 className="flex-1 border-slate-600 text-slate-300 hover:bg-slate-700"
               >
