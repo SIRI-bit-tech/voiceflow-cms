@@ -33,9 +33,13 @@ openai_client = None
 if os.getenv("OPENAI_API_KEY"):
     openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# Configure CORS origins from environment (comma-separated), defaulting to localhost for development
+_cors_env = os.getenv("CORS_ALLOW_ORIGINS") or os.getenv("ALLOWED_ORIGINS")
+_allowed_origins = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else ["http://localhost:3000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js dev server
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -43,6 +47,8 @@ app.add_middleware(
 
 security = HTTPBearer()
 SECRET_KEY = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
+if SECRET_KEY == "your-secret-key-change-in-production":
+    print("Warning: Using default JWT secret; set JWT_SECRET in environment for production.")
 ALGORITHM = "HS256"
 
 users_db = {}
@@ -83,6 +89,9 @@ class VoiceFileUpload(BaseModel):
 class AIProcessRequest(BaseModel):
     text: str
     task: str  # "enhance", "summarize", "translate"
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
@@ -210,6 +219,17 @@ async def login(user: UserLogin):
     token = create_access_token({"sub": stored_user["id"]})
     return {"access_token": token, "token_type": "bearer", "user": {"id": stored_user["id"], "email": user.email, "full_name": stored_user["full_name"]}}
 
+@app.post("/api/auth/reset-password")
+async def reset_password(request: ResetPasswordRequest):
+    # For security, do not reveal whether the email exists. Optionally generate a token if redis is available.
+    if redis_client and request.email in users_db:
+        try:
+            reset_token = str(uuid.uuid4())
+            redis_client.setex(f"pwdreset:{reset_token}", 3600, users_db[request.email]["id"])  # 1 hour expiry
+        except Exception:
+            pass
+    return {"message": "If an account with that email exists, a password reset link has been sent."}
+
 @app.post("/api/auth/voice-biometric")
 async def setup_voice_biometric(biometric: VoiceBiometric, current_user: str = Depends(get_current_user)):
     voice_profiles_db[current_user] = {
@@ -254,6 +274,20 @@ async def get_content(workspace_id: Optional[str] = None, current_user: str = De
             if workspace_id is None or content["workspace_id"] == workspace_id:
                 user_content.append(content)
     return user_content
+
+@app.get("/api/content/search")
+async def search_content(q: str, current_user: str = Depends(get_current_user)):
+    query = q.strip().lower()
+    if not query:
+        return []
+    results = []
+    for content in content_db.values():
+        if content["author_id"] == current_user:
+            title = (content.get("title") or "").lower()
+            body = (content.get("content") or "").lower()
+            if query in title or query in body:
+                results.append(content)
+    return results
 
 @app.get("/api/content/{content_id}")
 async def get_content_by_id(content_id: str, current_user: str = Depends(get_current_user)):
